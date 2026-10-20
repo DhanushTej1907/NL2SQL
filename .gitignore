@@ -1,0 +1,10 @@
+.env
+.venv/
+.cache/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+*.scaled.db
+samples/chinook.db
+scratch/
