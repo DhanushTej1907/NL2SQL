@@ -71,8 +71,15 @@ class TraceEntry:
         return [c for c in self.checks if not c.passed]
 
     def reason(self) -> str:
+        """Why the rule did not fire, phrased as the failure it was."""
         failed = self.failed_checks()
-        return "; ".join(c.description for c in failed) if failed else self.note
+        if not failed:
+            return self.note
+        return "; ".join(
+            f"{c.description} - not so: {c.evidence}" if c.evidence
+            else f"{c.description} - not so"
+            for c in failed
+        )
 
 
 @dataclass
@@ -637,6 +644,12 @@ def optimize(plan: Plan, symbols: SymbolTable,
                 break
         if not fired or firings >= MAX_FIRINGS:
             break
+
+    # A rule that fired somewhere will also have been re-examined and
+    # declined afterwards, which is just the fixpoint stopping. Only rules
+    # that never fired belong in the skipped list.
+    fired_names = {entry.rule for entry in trace}
+    skipped = [entry for entry in skipped if entry.rule not in fired_names]
 
     return OptimizeResult(Plan(root, set(plan.intents)), trace, skipped)
 
