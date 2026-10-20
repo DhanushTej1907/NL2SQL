@@ -72,6 +72,17 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 - The dump path (`samples/retail_dump.sql`) loads with **zero** load
   diagnostics and reproduces the SQLite sample's tables, row counts,
   primary keys and foreign keys exactly.
+- `streamlit run app.py --server.headless true` serves:
+  `/_stcore/health` returned `200 ok`.
+- **Fresh-clone check passed.** The repository was cloned to a scratch
+  directory, a new 3.12 virtualenv created, `pip install -r
+  requirements.txt` and `spacy download en_core_web_md` run from the
+  README's instructions alone, and then `pytest` (254 passed) and
+  `scripts/demo_check.py` (42/42, exit 0). The clone has no `.env`, so
+  that run also demonstrates the fallback degrading cleanly without a key.
+  The model download failed once with an invalid wheel and succeeded after
+  `pip cache purge`; that is a transient PyPI/pip issue, not a project
+  one.
 
 ## Known limitations
 
@@ -97,6 +108,6 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
   `renamed_university` fixture covers the same ground independently of the
   network, by renaming every table and column and re-running the same
   questions.
-- The fresh-clone check has not been run; the repository holds everything
-  needed for it (`requirements.txt`, `scripts/make_samples.py`, the
-  samples themselves).
+- `demo_check.py` takes a minute or two the first time the language-model
+  questions run against the live API; afterwards they are served from
+  `.cache/llm/` and the whole run takes a few seconds.
