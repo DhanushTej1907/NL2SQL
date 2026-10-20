@@ -346,7 +346,11 @@ class Tagger:
         tok = window[0]
         if tok.is_num or len(tok.lower) < 3:
             return []
-        if tok.pos not in ("NOUN", "PROPN", "ADJ", "VERB", "X", ""):
+        # Verbs are excluded: a verb that vaguely resembles a table name
+        # ("students send ...") would otherwise be read as schema and the
+        # question would be answered wrongly instead of handed to the
+        # fallback.
+        if tok.pos not in ("NOUN", "PROPN", "ADJ", "X", ""):
             return []
         phrase = tok.lower
         hits = self._match_abbreviation(phrase, start, end)

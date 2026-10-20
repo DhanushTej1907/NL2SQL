@@ -10,12 +10,15 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 | M2 — aggregates, group/order/top-k, FK joins, semantic diagnostics | done | Join paths by BFS over declared FKs, with naming-based inference as a fallback. |
 | M3 — IR, optimizer R1+R2, rewrite trace, equivalence check | done | Trace records fired *and* skipped rules with their preconditions. |
 | M4 — Streamlit app | done | `streamlit run app.py`; covered by `tests/test_app.py` using `streamlit.testing.v1.AppTest`. |
-| M5 — LLM fallback and on-disk cache | pending | |
+| M5 — LLM fallback and on-disk cache | done | Gemini via `google-genai`; resolved model `gemini-3.8-flash`; answers cached in `.cache/llm/`. |
 | M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | partly done | R3 and R4 are implemented and firing; dump loading is implemented in `schema.py`; `nokeys.db` is built. datagen pending. |
 | M7 — all tests green, `demo_check.py` all PASS, README | pending | |
 
 ## Environment
 
+- Gemini model resolved at runtime (no `GEMINI_MODEL` in `.env`): the
+  resolver picked **`gemini-3.8-flash`**, confirmed by a live call. The name
+  is cached in `.cache/llm/model.json`.
 - Python 3.12.5 in `C:\NL2SQL\.venv` (3.14 is the machine default, but spaCy's
   compiled dependencies have reliable Windows wheels on 3.12).
 - spaCy model: `en_core_web_md` installed successfully, so word vectors are
@@ -60,6 +63,14 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 - The controlled grammar covers the question shapes in `demo_questions.md`.
   Anything outside it goes to the LLM fallback by design.
 - No self-joins, and no `OR` across tables, in the compiler path.
+- The compiler can accept a question it only partly understands and answer
+  the part it recognised. The fallback triggers on a parse or semantic error,
+  on low tagger confidence, or on an unmatched content word — not on a
+  question whose words all match but whose shape does not. Verbs are excluded
+  from word-vector matching for this reason, since a verb resembling a table
+  name was the main source of such misreadings.
+- The LLM path depends on the API key and the provider's quota; without
+  either it reports `fallback_unavailable` rather than failing.
 - Join paths longer than three hops are refused and handed to the fallback.
 - When two join routes are equally short, the shortest declared one wins and
   an `info` diagnostic names the chosen path; the question may still be
