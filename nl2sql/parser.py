@@ -321,7 +321,7 @@ class Parser:
                 self._take(j)
             self._take(k)
 
-        # A bare value tag carries its own column ("students in CSE").
+        # A bare value tag carries its own column ("widgets in ZONE-3").
         for i in range(n):
             if not self._free(i):
                 continue
@@ -456,7 +456,7 @@ class Parser:
             self._take(i)
             self._take(j)
 
-        # Superlatives: "the highest gpa", "cheapest product".
+        # Superlatives: "the highest weight", "cheapest widget".
         for i, el in enumerate(self.elements):
             if not self._free(i):
                 continue

@@ -11,8 +11,8 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 | M3 — IR, optimizer R1+R2, rewrite trace, equivalence check | done | Trace records fired *and* skipped rules with their preconditions. |
 | M4 — Streamlit app | done | `streamlit run app.py`; covered by `tests/test_app.py` using `streamlit.testing.v1.AppTest`. |
 | M5 — LLM fallback and on-disk cache | done | Gemini via `google-genai`; resolved model `gemini-3.8-flash`; answers cached in `.cache/llm/`. |
-| M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | partly done | R3 and R4 are implemented and firing; dump loading is implemented in `schema.py`; `nokeys.db` is built. datagen pending. |
-| M7 — all tests green, `demo_check.py` all PASS, README | pending | |
+| M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | done | R3 and R4 fire with full precondition traces; the MySQL dump loads and answers identically to the SQLite sample; `nokeys.db` shows R2 and R4 safely skipped; `datagen.py` scaled `university.db` to 100,000 rows per table in **6.5 s**. Chinook not downloaded. |
+| M7 — all tests green, `demo_check.py` all PASS, README | done | 247 tests pass; `demo_check.py` reports 42/42 PASS; README written. |
 
 ## Environment
 
@@ -58,6 +58,21 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 - Extra files beyond the spec layout: `scripts/make_samples.py` (sample
   builder) and `nl2sql/sql_to_ir.py` (LLM SQL to IR helper, M5).
 
+## Verification (as last run)
+
+- `python -m pytest` -> **247 passed**, 1 deselected (the live-API test,
+  which is skipped unless it is asked for explicitly).
+- `python scripts/demo_check.py` -> **42/42 passed**, both with the
+  fallback live and with `NL2SQL_DISABLE_LLM=1`.
+- `grep -rwiE "<every sample table and column name>" --include="*.py"
+  nl2sql/` -> no hits. `tests/test_no_hardcoded_names.py` enforces the same
+  rule with `tokenize`, across identifiers, string literals and comments.
+- `datagen.py` on `university.db` at `--rows 100000`: 500,000 rows in
+  **6.5 s**, `foreign_key_check` clean.
+- The dump path (`samples/retail_dump.sql`) loads with **zero** load
+  diagnostics and reproduces the SQLite sample's tables, row counts,
+  primary keys and foreign keys exactly.
+
 ## Known limitations
 
 - The controlled grammar covers the question shapes in `demo_questions.md`.
@@ -75,3 +90,10 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 - When two join routes are equally short, the shortest declared one wins and
   an `info` diagnostic names the chosen path; the question may still be
   ambiguous in English.
+- Chinook was not downloaded; it is a non-graded smoke test and nothing
+  depends on it. The unseen-schema case is covered instead by the
+  `renamed_university` fixture, which renames every table and column and
+  re-runs the same questions.
+- The fresh-clone check has not been run; the repository holds everything
+  needed for it (`requirements.txt`, `scripts/make_samples.py`, the
+  samples themselves).

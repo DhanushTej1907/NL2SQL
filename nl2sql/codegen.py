@@ -97,7 +97,7 @@ def _operand(node: Node) -> str:
 
 
 def _collect_from(node: Node, where: list[str]) -> str:
-    """Walk the relational chain, building FROM and collecting WHERE terms."""
+    """Walk the relational chain, assembling FROM and collecting WHERE terms."""
     if isinstance(node, Unit):
         return ""
     if isinstance(node, Scan):

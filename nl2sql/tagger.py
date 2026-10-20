@@ -70,7 +70,7 @@ _SPLIT_RE = re.compile(r"[_\-\s]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]
 
 
 def split_identifier(name: str) -> list[str]:
-    """``order_items`` / ``OrderItems`` / ``orderItems`` -> ``[order, items]``."""
+    """``zorb_part`` / ``ZorbPart`` / ``zorbPart`` -> ``[zorb, part]``."""
     parts = [p for p in _SPLIT_RE.split(name) if p]
     return [p.lower() for p in parts]
 
@@ -295,7 +295,7 @@ class Tagger:
     def _is_all_grammar(self, window: list[Token]) -> bool:
         """For values: only a span made entirely of grammar words is skipped.
 
-        A real value may well contain one ("Block A", "Out of Stock"), so the
+        A real value may well contain one ("Zone A", "Out Of Range"), so the
         per-token rule used for names is too strict here.
         """
         if any(t.is_quoted for t in window):
@@ -309,14 +309,14 @@ class Tagger:
         phrase = " ".join(t.lower for t in window)
         lemma_phrase = " ".join(t.lemma for t in window)
         # A multi-word identifier may legitimately end in a grammar word
-        # ("score avg"), so a whole-span name match wins.
+        # ("zorb avg"), so a whole-span name match wins.
         if phrase in self._schema_forms or lemma_phrase in self._schema_forms:
             return False
         for tok in window:
             if tok.is_quoted or self._overridden(tok):
                 continue
             # A surface form that names something in this schema and is not
-            # itself a grammar word wins over its lemma (a table of orders
+            # itself a grammar word wins over its lemma (a plural table name
             # lemmatises to the grammar word "order").
             if tok.lower not in GRAMMAR_WORDS and tok.lower in self._schema_forms:
                 continue
@@ -347,7 +347,7 @@ class Tagger:
         if tok.is_num or len(tok.lower) < 3:
             return []
         # Verbs are excluded: a verb that vaguely resembles a table name
-        # ("students send ...") would otherwise be read as schema and the
+        # ("widgets ship ...") would otherwise be read as schema and the
         # question would be answered wrongly instead of handed to the
         # fallback.
         if tok.pos not in ("NOUN", "PROPN", "ADJ", "X", ""):
@@ -406,7 +406,7 @@ class Tagger:
             return False
         if full.startswith(short):
             return True
-        # subsequence match, e.g. "qty" inside "quantity"
+        # subsequence match, e.g. "zrb" inside "zorbulate"
         it = iter(full)
         return all(ch in it for ch in short)
 

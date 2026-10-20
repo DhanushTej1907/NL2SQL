@@ -416,30 +416,102 @@ def _detect_dialect(text: str) -> str:
 
 
 def _strip_table_options(stmt: exp.Expression) -> exp.Expression:
-    """Remove engine/charset/collation clutter SQLite cannot accept."""
-    drop_types = []
-    for attr in (
-        "EngineProperty",
-        "CharacterSetProperty",
-        "CollateProperty",
-        "AutoIncrementProperty",
-        "ChecksumProperty",
-    ):
-        cls = getattr(exp, attr, None)
-        if cls is not None:
-            drop_types.append(cls)
-    drop_types_t = tuple(drop_types)
+    """Remove engine, charset and collation clutter SQLite cannot accept."""
+    drop_types = tuple(
+        cls
+        for cls in (
+            getattr(exp, name, None)
+            for name in (
+                "EngineProperty",
+                "CharacterSetProperty",
+                "CollateProperty",
+                "AutoIncrementProperty",
+                "ChecksumProperty",
+                "RowFormatProperty",
+            )
+        )
+        if cls is not None
+    )
     for prop_node in list(stmt.find_all(exp.Properties)):
-        keep = [p for p in prop_node.expressions
-                if not (drop_types_t and isinstance(p, drop_types_t))]
-        prop_node.set("expressions", keep)
-    collate_cls = getattr(exp, "CollateColumnConstraint", None)
-    if collate_cls is not None:
-        for node in list(stmt.find_all(collate_cls)):
-            parent = node.parent
-            if parent is not None:
-                parent.pop()
+        if drop_types:
+            prop_node.set(
+                "expressions",
+                [p for p in prop_node.expressions if not isinstance(p, drop_types)],
+            )
     return stmt
+
+
+def _clean_column_defs(stmt: exp.Expression) -> None:
+    """Drop per-column clauses SQLite rejects, and normalise integer widths.
+
+    ``AUTO_INCREMENT`` transpiles to ``AUTOINCREMENT`` in front of
+    ``PRIMARY KEY``, which SQLite will not parse; it carries no meaning for
+    reading the data, so it goes. ``INTEGER(11)`` is dropped to ``INTEGER``
+    so that a single integer primary key is still a rowid alias.
+    """
+    unwanted = tuple(
+        cls
+        for cls in (
+            getattr(exp, name, None)
+            for name in (
+                "AutoIncrementColumnConstraint",
+                "CollateColumnConstraint",
+                "CharacterSetColumnConstraint",
+                "OnUpdateColumnConstraint",
+                "CommentColumnConstraint",
+            )
+        )
+        if cls is not None
+    )
+    integer_types = {exp.DataType.Type.INT, exp.DataType.Type.BIGINT,
+                     exp.DataType.Type.SMALLINT, exp.DataType.Type.TINYINT}
+    for column in list(stmt.find_all(exp.ColumnDef)):
+        if unwanted:
+            column.set(
+                "constraints",
+                [c for c in column.constraints if not isinstance(c.kind, unwanted)],
+            )
+        kind = column.args.get("kind")
+        if isinstance(kind, exp.DataType) and kind.this in integer_types:
+            kind.set("expressions", [])
+
+
+def _extract_indexes(stmt: exp.Expression) -> list[str]:
+    """Move table-level ``KEY``/``UNIQUE KEY`` clauses out of the CREATE TABLE.
+
+    SQLite has no inline index syntax, so secondary indexes become separate
+    ``CREATE INDEX`` statements and a named ``UNIQUE KEY`` loses its name.
+    """
+    schema = stmt.this
+    if not isinstance(schema, exp.Schema):
+        return []
+    table_name = schema.this.name if isinstance(schema.this, exp.Table) else "t"
+    index_cls = getattr(exp, "IndexColumnConstraint", None)
+    unique_cls = getattr(exp, "UniqueColumnConstraint", None)
+
+    keep: list[exp.Expression] = []
+    extra: list[str] = []
+    for item in schema.expressions:
+        if index_cls is not None and isinstance(item, index_cls):
+            name = item.this.name if item.this is not None else ""
+            columns = [c.this.name if isinstance(c, exp.Ordered) else c.name
+                       for c in (item.expressions or [])]
+            columns = [c for c in columns if c]
+            if name and columns:
+                cols = ", ".join(quote_ident(c) for c in columns)
+                extra.append(
+                    f"CREATE INDEX IF NOT EXISTS {quote_ident(name)} "
+                    f"ON {quote_ident(table_name)} ({cols})"
+                )
+            continue
+        if unique_cls is not None and isinstance(item, unique_cls):
+            inner = item.this
+            if isinstance(inner, exp.Schema) and inner.this is not None:
+                # a named UNIQUE KEY: keep the columns, drop the name
+                item = unique_cls(this=exp.Schema(expressions=inner.expressions))
+        keep.append(item)
+    schema.set("expressions", keep)
+    return extra
 
 
 def load_sql_dump(path: Path, target_dir: Path | None = None) -> tuple[Path, list[str]]:
@@ -474,18 +546,25 @@ def load_sql_dump(path: Path, target_dir: Path | None = None) -> tuple[Path, lis
             for stmt in statements:
                 if stmt is None or isinstance(stmt, skip_types):
                     continue
+                extra: list[str] = []
                 try:
                     cleaned = _strip_table_options(stmt.copy())
+                    _clean_column_defs(cleaned)
+                    if isinstance(cleaned, exp.Create):
+                        extra = _extract_indexes(cleaned)
                     sql = cleaned.sql(dialect="sqlite")
                 except Exception as exc:
                     diagnostics.append(f"transpile failed: {exc}")
                     continue
                 if not sql.strip():
                     continue
-                try:
-                    conn.execute(sql)
-                except sqlite3.Error as exc:
-                    diagnostics.append(f"statement skipped ({exc}): {sql[:120]}")
+                for statement_sql in [sql, *extra]:
+                    try:
+                        conn.execute(statement_sql)
+                    except sqlite3.Error as exc:
+                        diagnostics.append(
+                            f"statement skipped ({exc}): {statement_sql[:120]}"
+                        )
         conn.commit()
     finally:
         conn.close()
