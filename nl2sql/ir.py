@@ -356,28 +356,6 @@ def pretty(node: Node, intents: Iterable[str] = ()) -> str:
 # ----------------------------------------------------------------------
 # Traversal helpers used by the optimizer
 # ----------------------------------------------------------------------
-def transform_bottom_up(node: Node, fn) -> Node:
-    """Rebuild the tree, applying ``fn`` to each node after its children."""
-    children = node.children()
-    if children:
-        new_children = [transform_bottom_up(c, fn) for c in children]
-        if any(a is not b for a, b in zip(children, new_children)):
-            node = node.with_children(new_children)
-    if isinstance(node, Project):
-        new_items = []
-        changed = False
-        for expr, alias in node.items:
-            if isinstance(expr, ExistsExpr):
-                inner = transform_bottom_up(expr.source, fn)
-                if inner is not expr.source:
-                    expr = replace(expr, source=inner)
-                    changed = True
-            new_items.append((expr, alias))
-        if changed:
-            node = replace(node, items=tuple(new_items))
-    return fn(node)
-
-
 def walk_nodes(node: Node) -> Iterable[Node]:
     yield node
     for child in node.children():
@@ -386,28 +364,6 @@ def walk_nodes(node: Node) -> Iterable[Node]:
         for expr, _ in node.items:
             if isinstance(expr, ExistsExpr):
                 yield from walk_nodes(expr.source)
-
-
-def expr_columns(expr: Expr | None) -> list[ColRef]:
-    return expr.columns() if expr is not None else []
-
-
-def columns_used_above(root: Node, target: Node) -> set[tuple[str, str]] | None:
-    """Columns referenced anywhere outside ``target``'s own subtree.
-
-    Returns ``None`` when ``target`` is not part of ``root``.
-    """
-    inside = {id(n) for n in walk_nodes(target)}
-    if id(target) not in {id(n) for n in walk_nodes(root)}:
-        return None
-    used: set[tuple[str, str]] = set()
-
-    for node in walk_nodes(root):
-        if id(node) in inside:
-            continue
-        for col in node_columns(node):
-            used.add(col.key)
-    return used
 
 
 def node_columns(node: Node) -> list[ColRef]:

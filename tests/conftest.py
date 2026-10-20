@@ -26,7 +26,6 @@ def _ensure_samples() -> None:
     sys.path.insert(0, str(ROOT / "scripts"))
     import make_samples
 
-    make_samples.main_build_all() if hasattr(make_samples, "main_build_all") else None
     for builder in make_samples.BUILDERS.values():
         builder()
 
