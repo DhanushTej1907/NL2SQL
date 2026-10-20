@@ -6,5 +6,5 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 *.scaled.db
-samples/chinook.db
+# samples/chinook.db is committed: it is the unseen-schema smoke test
 scratch/

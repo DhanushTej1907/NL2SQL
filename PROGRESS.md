@@ -11,7 +11,7 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 | M3 — IR, optimizer R1+R2, rewrite trace, equivalence check | done | Trace records fired *and* skipped rules with their preconditions. |
 | M4 — Streamlit app | done | `streamlit run app.py`; covered by `tests/test_app.py` using `streamlit.testing.v1.AppTest`. |
 | M5 — LLM fallback and on-disk cache | done | Gemini via `google-genai`; resolved model `gemini-3.8-flash`; answers cached in `.cache/llm/`. |
-| M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | done | R3 and R4 fire with full precondition traces; the MySQL dump loads and answers identically to the SQLite sample; `nokeys.db` shows R2 and R4 safely skipped; `datagen.py` scaled `university.db` to 100,000 rows per table in **6.5 s**. Chinook not downloaded. |
+| M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | done | R3 and R4 fire with full precondition traces; the MySQL dump loads and answers identically to the SQLite sample; `nokeys.db` shows R2 and R4 safely skipped; `datagen.py` scaled `university.db` to 100,000 rows per table in **6.5 s**. Chinook downloaded and added as an unseen-schema smoke test. |
 | M7 — all tests green, `demo_check.py` all PASS, README | done | 247 tests pass; `demo_check.py` reports 42/42 PASS; README written. |
 
 ## Environment
@@ -60,7 +60,7 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 
 ## Verification (as last run)
 
-- `python -m pytest` -> **247 passed**, 1 deselected (the live-API test,
+- `python -m pytest` -> **254 passed**, 1 deselected (the live-API test,
   which is skipped unless it is asked for explicitly).
 - `python scripts/demo_check.py` -> **42/42 passed**, both with the
   fallback live and with `NL2SQL_DISABLE_LLM=1`.
@@ -90,10 +90,13 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 - When two join routes are equally short, the shortest declared one wins and
   an `info` diagnostic names the chosen path; the question may still be
   ambiguous in English.
-- Chinook was not downloaded; it is a non-graded smoke test and nothing
-  depends on it. The unseen-schema case is covered instead by the
-  `renamed_university` fixture, which renames every table and column and
-  re-runs the same questions.
+- Chinook (`samples/chinook.db`) is a non-graded smoke test, covered by
+  `tests/test_chinook.py`, which skips itself if the file is absent. Its
+  PascalCase names (`InvoiceLine`, `ArtistId`, `Milliseconds`) exercise
+  identifier splitting on a schema the compiler has never seen. The
+  `renamed_university` fixture covers the same ground independently of the
+  network, by renaming every table and column and re-running the same
+  questions.
 - The fresh-clone check has not been run; the repository holds everything
   needed for it (`requirements.txt`, `scripts/make_samples.py`, the
   samples themselves).

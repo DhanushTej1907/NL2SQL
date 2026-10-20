@@ -39,6 +39,10 @@ GENERIC = {
     "price", "date", "city", "country", "email", "stock", "score", "title",
     "building", "budget", "grade", "credits", "quantity", "salary",
     "designation", "semester", "opponent", "points", "weight",
+    # also ordinary English or Python vocabulary, and column names in the
+    # downloaded Chinook sample
+    "bytes", "state", "address", "phone", "company", "composer", "position",
+    "line", "lines", "support", "unit", "units", "track", "media", "invoice",
 }
 
 # SQL type words, PRAGMA and driver result keys, and sqlglot argument names
