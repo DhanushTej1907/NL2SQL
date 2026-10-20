@@ -9,7 +9,7 @@ Status log for the NL2SQL compiler described in `SPEC.md` and planned in `PLAN.m
 | M1 — schema, lexer, tagger, parser (SELECT/WHERE), codegen, CLI | done | Works on `university.db`; CLI is `python -m nl2sql`. |
 | M2 — aggregates, group/order/top-k, FK joins, semantic diagnostics | done | Join paths by BFS over declared FKs, with naming-based inference as a fallback. |
 | M3 — IR, optimizer R1+R2, rewrite trace, equivalence check | done | Trace records fired *and* skipped rules with their preconditions. |
-| M4 — Streamlit app | pending | |
+| M4 — Streamlit app | done | `streamlit run app.py`; covered by `tests/test_app.py` using `streamlit.testing.v1.AppTest`. |
 | M5 — LLM fallback and on-disk cache | pending | |
 | M6 — R3, R4, `.sql` dump loading, `nokeys.db`, datagen | partly done | R3 and R4 are implemented and firing; dump loading is implemented in `schema.py`; `nokeys.db` is built. datagen pending. |
 | M7 — all tests green, `demo_check.py` all PASS, README | pending | |

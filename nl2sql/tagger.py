@@ -192,8 +192,15 @@ class Tagger:
 
     # -- public ---------------------------------------------------------
     def tag(self, tokens: list[Token]) -> TagResult:
+        """Tag a token stream, strongest evidence first.
+
+        Exact schema names are claimed before aggregate keywords, so a column
+        called ``score_avg`` is not broken apart by the word "avg". A keyword
+        that also names something here is emitted twice, leaving the choice
+        to the parser.
+        """
         result = TagResult(tokens=list(tokens))
-        covered_by_grammar: set[int] = set()
+        consumed: set[int] = set()
 
         for tok in tokens:
             if tok.is_operator:
@@ -201,17 +208,15 @@ class Tagger:
                     Tag("operator", tok.index, tok.index + 1, 1.0,
                         operator=tok.operator, how="comparison phrase", text=tok.text)
                 )
-                covered_by_grammar.add(tok.index)
+                consumed.add(tok.index)
 
-        for tag in self._tag_aggregates(tokens):
-            result.tags.append(tag)
-            # A word like "total" may also be a column here; leave the span
-            # open so the schema pass can offer the parser both readings.
-            if not any(self._overridden(tokens[i]) for i in range(tag.start, tag.end)):
-                covered_by_grammar.update(range(tag.start, tag.end))
-
-        schema_tags = self._tag_schema(tokens, covered_by_grammar)
-        result.tags.extend(schema_tags)
+        result.tags += self._sweep(tokens, consumed, self._match_names, MAX_NGRAM,
+                                   self._is_grammar_span)
+        result.tags += self._tag_aggregates(tokens, consumed)
+        result.tags += self._sweep(tokens, consumed, self._match_values, MAX_NGRAM,
+                                   self._is_all_grammar)
+        result.tags += self._sweep(tokens, consumed, self._match_fuzzy, 1,
+                                   self._is_grammar_span)
 
         tagged = {i for t in result.tags for i in range(t.start, t.end)}
         for tok in tokens:
@@ -226,7 +231,7 @@ class Tagger:
         return result
 
     # -- aggregates -----------------------------------------------------
-    def _tag_aggregates(self, tokens: list[Token]) -> list[Tag]:
+    def _tag_aggregates(self, tokens: list[Token], consumed: set[int]) -> list[Tag]:
         tags: list[Tag] = []
         i = 0
         while i < len(tokens):
@@ -234,19 +239,26 @@ class Tagger:
             for n in (2, 1):
                 if i + n > len(tokens):
                     continue
-                phrase = " ".join(t.lower for t in tokens[i : i + n])
-                if phrase in AGGREGATE_WORDS:
-                    # "number" only counts as COUNT when it reads as "number of".
-                    if phrase == "number" and not self._followed_by(tokens, i + n, "of"):
-                        continue
-                    tags.append(
-                        Tag("aggregate", i, i + n, 1.0,
-                            aggregate=AGGREGATE_WORDS[phrase],
-                            how="aggregate keyword", text=phrase)
-                    )
-                    i += n
-                    matched = True
-                    break
+                window = tokens[i : i + n]
+                phrase = " ".join(t.lower for t in window)
+                if phrase not in AGGREGATE_WORDS:
+                    continue
+                # "number" only counts as COUNT when it reads as "number of".
+                if phrase == "number" and not self._followed_by(tokens, i + n, "of"):
+                    continue
+                claimed = any(t.index in consumed for t in window)
+                if claimed and not all(self._overridden(t) for t in window):
+                    continue
+                tags.append(
+                    Tag("aggregate", i, i + n, 1.0,
+                        aggregate=AGGREGATE_WORDS[phrase],
+                        how="aggregate keyword", text=phrase)
+                )
+                if not claimed:
+                    consumed.update(range(i, i + n))
+                i += n
+                matched = True
+                break
             if not matched:
                 i += 1
         return tags
@@ -256,24 +268,8 @@ class Tagger:
         return index < len(tokens) and tokens[index].lower == word
 
     # -- schema elements -------------------------------------------------
-    def _tag_schema(self, tokens: list[Token], skip: set[int]) -> list[Tag]:
-        """Three passes, strongest evidence first.
-
-        Exact and morphological name matches win outright. Sampled values come
-        next. Fuzzy evidence (abbreviations, word vectors) is a last resort on
-        single leftover content words, so a fuzzy hit can never swallow a span
-        that contains a confident match.
-        """
-        tags: list[Tag] = []
-        consumed: set[int] = set(skip)
-
-        tags += self._sweep(tokens, consumed, self._match_names, MAX_NGRAM)
-        tags += self._sweep(tokens, consumed, self._match_values, MAX_NGRAM)
-        tags += self._sweep(tokens, consumed, self._match_fuzzy, 1)
-        return tags
-
     def _sweep(self, tokens: list[Token], consumed: set[int], matcher,
-               max_size: int) -> list[Tag]:
+               max_size: int, skip) -> list[Tag]:
         """Longest-span-first sweep with one matcher, marking spans consumed."""
         tags: list[Tag] = []
         for size in range(max_size, 0, -1):
@@ -283,7 +279,7 @@ class Tagger:
                 if any(t.index in consumed or t.is_operator for t in window):
                     i += 1
                     continue
-                if self._is_grammar_span(window):
+                if skip(window):
                     i += 1
                     continue
                 found = matcher(window, i, i + size)
@@ -296,8 +292,26 @@ class Tagger:
                     i += 1
         return tags
 
+    def _is_all_grammar(self, window: list[Token]) -> bool:
+        """For values: only a span made entirely of grammar words is skipped.
+
+        A real value may well contain one ("Block A", "Out of Stock"), so the
+        per-token rule used for names is too strict here.
+        """
+        if any(t.is_quoted for t in window):
+            return False
+        return all(
+            t.lower in GRAMMAR_WORDS or t.lemma in GRAMMAR_WORDS for t in window
+        )
+
     def _is_grammar_span(self, window: list[Token]) -> bool:
         """A span holding a grammar word is never a schema or value match."""
+        phrase = " ".join(t.lower for t in window)
+        lemma_phrase = " ".join(t.lemma for t in window)
+        # A multi-word identifier may legitimately end in a grammar word
+        # ("score avg"), so a whole-span name match wins.
+        if phrase in self._schema_forms or lemma_phrase in self._schema_forms:
+            return False
         for tok in window:
             if tok.is_quoted or self._overridden(tok):
                 continue
