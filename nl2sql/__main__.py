@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import ir
+from .display import format_sql
 from .pipeline import compile as compile_question
 from .schema import load_database
 
@@ -35,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--no-llm", action="store_true", help="never use the LLM fallback")
     ap.add_argument("--rows", type=int, default=20, help="result rows to print")
+    ap.add_argument("--raw", action="store_true",
+                    help="print the full generated SQL instead of the compact form")
     return ap
 
 
@@ -94,10 +97,18 @@ def main(argv: list[str] | None = None) -> int:
         print(result.optimized_plan.pretty())
 
     print()
-    print("naive SQL:")
-    print("  " + result.naive_sql)
-    print("optimized SQL:")
-    print("  " + (result.dialect_sql or result.optimized_sql))
+    if args.raw:
+        print("naive SQL:")
+        print("  " + result.naive_sql)
+        print("optimized SQL:")
+        print("  " + (result.dialect_sql or result.optimized_sql))
+    else:
+        for label, sql in (("naive SQL:", result.naive_sql),
+                           ("optimized SQL:", result.optimized_sql)):
+            print(label)
+            if sql:
+                shown = format_sql(sql, args.dialect, db.symbols)
+                print("\n".join("  " + line for line in shown.splitlines()))
 
     if "trace" in show:
         print()

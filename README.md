@@ -60,19 +60,73 @@ result.
 
 ## Running it
 
-**The demo app**
+**Start here**
 
 ```bash
-streamlit run app.py
+python main.py
 ```
 
-Pick a bundled sample or upload your own `.sqlite`, `.db` or `.sql`, then
-ask a question. The tabs show results, tokens and tags with confidences,
-the AST, the naive and optimized IR, the two SQL queries side by side, the
-rewrite trace with a checkmark per precondition, `EXPLAIN QUERY PLAN`
-before and after, timings and diagnostics. Two badges sit above the tabs:
-whether the **compiler** or the **LLM fallback** produced the SQL, and
-whether the equivalence check passed.
+A numbered menu lists the databases in `samples/` plus an option to type
+any path; press Enter for `samples/university.db`. To skip the menu, give
+the path directly:
+
+```bash
+python main.py samples/retail.db
+python main.py samples/retail_dump.sql --dialect postgres --no-llm
+```
+
+(`python ask.py PATH` does the same, without the menu.)
+
+The database and the spaCy model load once; then each question you type
+prints the naive and the optimized SQL:
+
+```
+Enter your query in natural language: which departments have students with gpa over 9.9
+-- Normal SQL --
+SELECT DISTINCT
+  department.*
+FROM department
+INNER JOIN (
+  SELECT
+    *
+  FROM student
+  WHERE
+    student.gpa > 9.9
+) AS student
+  ON (
+    student.dept_id = department.id
+  )
+-- Optimized SQL --
+SELECT
+  *
+FROM department
+WHERE
+  EXISTS(
+    SELECT
+      1
+    FROM student
+    WHERE
+      student.gpa > 9.9 AND student.dept_id = department.id
+  )
+Rules: R2, R3 | equivalent ✓ | source: Compiler | 9 ms
+```
+
+If no rule fires, a line says the query is already optimal; if the LLM
+fallback answered, the source reads `LLM fallback`. A question that cannot
+be compiled prints one line saying why, and the prompt comes back.
+
+The SQL is shown in a compact form for reading: a select list naming every
+column of a table in schema order becomes `*` (or `table.*` in a join),
+identifiers lose their quotes unless they need them (reserved words,
+spaces, mixed case), and parentheses around a whole `WHERE`/`HAVING`
+condition are dropped. The SQL that runs, and the equivalence check, are
+unchanged. Start with `--raw`, or type `:raw`, to see the full form.
+
+Commands: `:trace` (rewrite trace for the last question: fired and skipped
+rules with their checks), `:rows` (toggle printing the first 10 result
+rows), `:raw` (toggle the full, fully quoted SQL), `:schema`, `:quit`.
+Ctrl+C clears the line; Ctrl+D / Ctrl+Z+Enter exits. Colors switch off when
+the output is not a terminal (or `NO_COLOR` is set).
 
 **The command line**
 
@@ -87,7 +141,8 @@ python -m nl2sql "is there any player with score above 95" --db samples/nokeys.d
 ```
 
 Options: `--show tokens,tags,ast,ir,optimized,trace,plan,schema,diagnostics`,
-`--dialect <sqlglot dialect>`, `--json`, `--no-llm`, `--rows N`.
+`--dialect <sqlglot dialect>`, `--json`, `--no-llm`, `--rows N`, `--raw`
+(print the full generated SQL instead of the compact form).
 
 **Scaling a database up**
 
@@ -213,7 +268,10 @@ nl2sql/
   equivalence.py   run both queries, compare the result multisets
   pipeline.py      compile(question, db) -> CompileResult
   __main__.py      the CLI
-app.py             the Streamlit demo
+  repl.py          the interactive terminal
+  display.py       compact SQL rendering for display (never what runs)
+main.py            entry point: database menu, then the interactive terminal
+ask.py             the interactive terminal without the menu
 datagen.py         schema-driven data generator
 scripts/           make_samples.py, demo_check.py
 samples/           the bundled databases

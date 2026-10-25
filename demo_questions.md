@@ -16,7 +16,6 @@ fallback was unavailable and said so cleanly.
 
 - show students with gpa above 9.5
 - show the name and gpa of students with gpa above 9.8
-- show courses with credits at least 4
 - list names of students in CSE
 - how many students are there
 - what is the highest gpa
@@ -33,13 +32,15 @@ fallback was unavailable and said so cleanly.
 
 ### llm
 
+Complex queries, outside the controlled grammar.
+
 - for every department show the number of students whose gpa is above the overall average gpa
 - rank the departments by the share of students scoring above 9, highest share first
 
 ## retail.db
 
 ### compiler
-
+    
 - show products with price above 8000
 - show the name and price of products in Electronics
 - how many orders are there

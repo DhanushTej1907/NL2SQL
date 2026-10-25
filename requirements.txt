@@ -1,10 +1,8 @@
 spacy>=3.8,<3.9
 sqlglot>=25,<28
 SQLAlchemy>=2.0,<2.1
-streamlit>=1.37,<2
 google-genai>=1.0,<2
 python-dotenv>=1.0
 Faker>=25
 numpy<3
 pytest>=8
-pandas>=2.0
